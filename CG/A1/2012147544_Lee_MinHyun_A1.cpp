@@ -1,6 +1,4 @@
-//  Assignment 1: “3D Gasket” & “Snowy World”
-//	CSI4105: Computer Graphics
-//	2012147544 Lee_MinHyun
+
 
 // standard glut include, get use to putting this in.
 #include <GL/glut.h>
