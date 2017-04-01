@@ -43,7 +43,7 @@
     	sw $a0, 0($sp)
     	
     	LOOP_MUL:
-    		add $v1, $v1, $a1
+    		addu $v1, $v1, $a1
     		subi $a0, $a0, 1
     		
     		bgtz $a0, LOOP_MUL
@@ -87,7 +87,7 @@
     syscall
     
     # Print or show the result
-    li $v0, 1
+    li $v0, 36
     move $a0, $v1
     syscall
     
