@@ -8,6 +8,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>  // uid_t
 
+#define MAX_PATHS 64
 #define MAX_PATH_LEN 96
 #define LINE_LEN 80
 #define MAX_ARGS 64
@@ -15,8 +16,10 @@
 static char command_char = NULL;
 static char command_line[LINE_LEN];
 static int  buf_chars = 0;
+static char *pathv[MAX_PATHS];
 
 struct command {
+    char* name;
     int num_arg;
     char* arg[MAX_ARGS];
 };
@@ -84,15 +87,148 @@ void call_cd() {
     }
 }
 
-void check_command() {
+// excuteCommand() executes regular command, commands which doesn't have > < |
+// rediractions
+//
+// example: ls -il, cat filname
+//
+// @return 0 if exec if successful
+int excuteCommand() {
+
+	int child_pid;
+	int status;
+	pid_t thisChPID;
+
+
+	child_pid = fork();
+	if(child_pid < 0 ) {
+		fprintf(stderr, "Fork fails: \n");
+		return 1;
+	}
+	else if(child_pid==0) {
+		/* CHILD */
+		execve(command.name, command.arg,0);
+		printf("Child process failed\n");
+		return 1;
+	}
+	else if(child_pid > 0) {
+		/* PARENT */
+
+		do {
+			thisChPID = waitpid(child_pid, &status, WUNTRACED | WCONTINUED);
+            if (thisChPID == -1) {
+                perror("waitpid");
+                exit(EXIT_FAILURE);
+            }
+
+            if (WIFEXITED(status)) {
+                //printf("exited, status=%d\n", WEXITSTATUS(status));
+                return 0;
+            } else if (WIFSIGNALED(status)) {
+                printf("killed by signal %d\n", WTERMSIG(status));
+            } else if (WIFSTOPPED(status)) {
+                printf("stopped by signal %d\n", WSTOPSIG(status));
+            } else if (WIFCONTINUED(status)) {
+                printf("continued\n");
+            }
+		} while (!WIFEXITED(status) && !WIFSIGNALED(status));
+		return 0;
+	}
+}
+
+
+int check_command() {
 
     if(strcmp("cd", command.arg[0]) == 0) {
         call_cd();
+        return 1;
     }
+    else if(strcmp("clear", command.arg[0]) == 0) {
+        printf("\033[2J\033[1;1H");
+        return 1;
+    }
+    return 0;
 }
 
+// this function populates "pathv" with environment variable PATH
+int parsePath(char* dirs[]){
+	int debug = 0;
+	char* pathEnvVar;
+	char* thePath;
+	int i;
+
+	for(i=0 ; i < MAX_ARGS ; i++ )
+		dirs[i] = NULL;
+	pathEnvVar = (char*) getenv("PATH");
+	thePath = (char*) malloc(strlen(pathEnvVar) + 1);
+	strcpy(thePath, pathEnvVar);
+
+	char* pch;
+	pch = strtok(thePath, ":");
+	int j=0;
+	// loop through the thePath for ':' delimiter between each path name
+	while(pch != NULL) {
+		pch = strtok(NULL, ":");
+		dirs[j] = pch;
+		j++;
+	}
+
+	//===================== debug ===============
+	// print the directories if debugging
+	if(debug){
+		printf("Directories in PATH variable\n");
+		for(i=0; i<MAX_PATHS; i++)
+			if(dirs[i] != '\0')
+				printf("    Directory[%d]: %s\n", i, dirs[i]);
+	}
+}
+
+char * lookupPath(char **argv, char **dir) {
+	char *result;
+	char pName[MAX_PATH_LEN];
+	if( *argv[0] == '/') {
+		return argv[0];
+	}
+	else if( *argv[0] == '.') {
+		if( *++argv[0] == '.') {
+			 if(getcwd(pName,sizeof(pName)) == NULL)
+				 perror("getcwd(): error\n");
+			 else {
+				 *--argv[0];
+				 asprintf(&result,"%s%s%s",pName,"/",argv[0]);
+			 }
+			 return result;
+		}
+		*--argv[0];
+		if( *++argv[0] == '/') {
+			if(getcwd(pName,sizeof(pName)) == NULL)
+				perror("getcwd(): error\n");
+			else {
+				asprintf(&result,"%s%s",pName,argv[0]);
+			}
+			return result;
+		}
+	}
+
+	// look in PAH directories, use access() to see if the
+	// file is in the dir
+	int i;
+	for(i = 0 ; i < MAX_PATHS ; i++ ) {
+		if(dir[i] != NULL) {
+			asprintf(&result,"%s%s%s",  dir[i],"/",argv[0]);
+			if(access(result, X_OK) == 0) {
+				return result;
+			}
+		}
+		else continue;
+	}
+
+	fprintf(stderr, "%s: command not found\n", argv[0]);
+	return NULL;
+}
 int main()
 {
+    parsePath(pathv);
     hello();
 
     while(1) {
@@ -106,7 +242,10 @@ int main()
 
         parse_command(command_line, &command);
 
-        check_command();
+        if(check_command() == 0) {
+            command.name = lookupPath(command.arg, pathv);
+            excuteCommand();
+        }
     }
     return 0;
 }
