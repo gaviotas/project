@@ -38,18 +38,21 @@
     	sw $s0, 4($sp)
     	sw $a0, 0($sp)
   	
-  	li $v1, 1
+  	li $v1 ,0				# F(0) = 0
+  	beq $a0, $zero, EXIT
+  	
+  	li $v1, 1				# F(n)  (n<=2) = 1
   	ble $a0, 2, EXIT
   	
-  	addi $a0, $a0, -1
+  	addi $a0, $a0, -1		# comupte F(n-1)
   	jal FIBONACCI
   	
   	move $s0, $v1
   	
-  	addi $a0, $a0, -1
+  	addi $a0, $a0, -1		# compute F(n-2)
   	jal FIBONACCI
   	
-  	add $v1, $s0, $v1
+  	add $v1, $s0, $v1		# F(n) = F(n-1) + F(n-2)
   	
     EXIT:
     	lw $a0, 0($sp)
