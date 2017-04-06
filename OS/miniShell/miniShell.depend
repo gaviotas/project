@@ -1,0 +1,12 @@
+# depslib dependency file v1.0
+1491050956 source:/home/lmh/workspaces/miniShell/main.c
+	<stdio.h>
+	<string.h>
+	<stdlib.h>
+	<unistd.h>
+	<pwd.h>
+	<time.h>
+	<fcntl.h>
+	<sys/stat.h>
+	<sys/types.h>
+
