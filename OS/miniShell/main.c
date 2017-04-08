@@ -87,13 +87,88 @@ void call_cd() {
     }
 }
 
+int process_command() {
+    int i;
+    for(i=0; i<command.num_arg; i++) {
+        if(strcmp(command.arg[i], ">")==0) {
+        return file_out_command(i);
+        }
+        else if(strcmp(command.arg[i], "<")==0) {
+        return file_in_command(i);
+        }
+    }
+    return excute_command();
+}
+
+int file_out_command(int i) {
+
+    char* arg_t[5];
+    int j;
+
+    for(j=0; j<i; j++) {
+        arg_t[j] = command.arg[j];
+    }
+    arg_t[j] = NULL;
+
+    int fd = dup(1);
+
+    int file = open(command.arg[i+1], O_WRONLY | O_CREAT | O_TRUNC, S_IRWXU | S_IRGRP | S_IROTH);
+    if(file < 0) return 1; // file open fails
+
+    if(dup2(file,1) < 0) return 1;
+
+    pid_t pid;
+    if(pid = fork() == 0) {
+        close(file);
+        close(fd);
+        execve(command.name, arg_t, 0);
+        return 0;
+    }
+    dup2(fd,1);
+    close(file);
+    close(fd);
+    wait(NULL);
+    return 0;
+}
+
+int file_in_command(int i) {
+
+    char* arg_t[5];
+    int j;
+
+    for(j=0; j<i; j++) {
+        arg_t[j] = command.arg[j];
+    }
+    arg_t[j] = NULL;
+
+    int fd = dup(0);
+    FILE * fp;
+    int file = open(command.arg[i+1], O_RDONLY);
+    if(file < 0) return 1; // file open fails
+
+    if(dup2(file,STDIN_FILENO) < 0) return 1;
+
+    pid_t pid;
+    if(pid = fork() == 0) {
+        close(file);
+        close(fd);
+        execve(command.name, arg_t, 0);
+        return 0;
+    }
+    dup2(fd,0);
+    close(file);
+    close(fd);
+    wait(NULL);
+    return 0;
+}
+
 // excuteCommand() executes regular command, commands which doesn't have > < |
 // rediractions
 //
 // example: ls -il, cat filname
 //
 // @return 0 if exec if successful
-int excuteCommand() {
+int excute_command() {
 
 	int child_pid;
 	int status;
@@ -157,19 +232,23 @@ int parsePath(char* dirs[]){
 	char* thePath;
 	int i;
 
-	for(i=0 ; i < MAX_ARGS ; i++ )
+	for(i=0 ; i < MAX_ARGS ; i++ ) {
 		dirs[i] = NULL;
+		}
 	pathEnvVar = (char*) getenv("PATH");
 	thePath = (char*) malloc(strlen(pathEnvVar) + 1);
 	strcpy(thePath, pathEnvVar);
-
+//    printf("%s\n\n",thePath);
 	char* pch;
 	pch = strtok(thePath, ":");
 	int j=0;
+//	printf("%s\n",pathEnvVar);
+//	printf("%s\n",pch);
 	// loop through the thePath for ':' delimiter between each path name
 	while(pch != NULL) {
+        dirs[j] = pch;
 		pch = strtok(NULL, ":");
-		dirs[j] = pch;
+//		printf("%s %d\n",dirs[j], j);
 		j++;
 	}
 
@@ -187,6 +266,7 @@ char * lookupPath(char **argv, char **dir) {
 	char *result;
 	char pName[MAX_PATH_LEN];
 	if( *argv[0] == '/') {
+        printf("%s\n",argv[0]);
 		return argv[0];
 	}
 	else if( *argv[0] == '.') {
@@ -197,6 +277,7 @@ char * lookupPath(char **argv, char **dir) {
 				 *--argv[0];
 				 asprintf(&result,"%s%s%s",pName,"/",argv[0]);
 			 }
+			 printf("%s\n",result);
 			 return result;
 		}
 		*--argv[0];
@@ -206,6 +287,7 @@ char * lookupPath(char **argv, char **dir) {
 			else {
 				asprintf(&result,"%s%s",pName,argv[0]);
 			}
+			printf("%s\n",result);
 			return result;
 		}
 	}
@@ -217,6 +299,7 @@ char * lookupPath(char **argv, char **dir) {
 		if(dir[i] != NULL) {
 			asprintf(&result,"%s%s%s",  dir[i],"/",argv[0]);
 			if(access(result, X_OK) == 0) {
+                printf("%s\n",result);
 				return result;
 			}
 		}
@@ -244,8 +327,10 @@ int main()
 
         if(check_command() == 0) {
             command.name = lookupPath(command.arg, pathv);
-            excuteCommand();
+            process_command();
+
         }
     }
     return 0;
 }
+
