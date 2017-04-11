@@ -2,7 +2,7 @@
 //
 
 #include <stdlib.h>
-#include <gl\glut.h>
+#include <GL/glut.h>
 #include <stdio.h>
 #include <math.h>
 #include <string.h>
@@ -13,147 +13,250 @@
 int winW, winH;   // <---- window's width (W) and height (H)
 
 int mouseX = 0, mouseY = 0; // <-- use globals to know last mouse click location
-
+double move_x, move_y, move_angle;
 int drawing_state = 0;
 
 static int mode_program = 0; // 0 : Draw Mode , 1 : Selection Mode
-static int mode_drawing = -1; // 0 : lines, 1 : rectangles, 2 : circles, 3 : triangle 
+static int mode_drawing = -1; // 0 : lines, 1 : rectangles, 2 : circles, 3 : triangle
 static int mode_selection = -1; // 0 : select, 1 : rotation
 static int mult_select;
+static int line_width = 1;
+static int line_color = 0;
+
+static int count = 0;
 
 static 	char * text;
+FILE *fp;
 
 struct line {
-	int x1, y1;
-	int x2, y2;
+	double x1, y1;
+	double x2, y2;
 	int drawing_state;
-
-	int t_x, t_y;
-	int r_a;
+	int w;
+	int selected;
+	int order;
+	int c;
 
 };
 
 struct rect {
-	int x1, y1;
-	int x2, y2;
-	int x3, y3;
-	int x4, y4;
+	double x1, y1;
+	double x2, y2;
+	double x3, y3;
+	double x4, y4;
 	int drawing_state;
-
-	int t_x, t_y;
-	int r_a;
+	int w;
+	int selected;
+	int order;
+	int c;
 };
 
 struct circle {
 	double rad;
-	int x, y;
+	double x, y;
 	int drawing_state;
+	int w;
+	int selected;
+	int order;
+	int c;
+};
 
-	int t_x, t_y;
-	int r_a;
+struct triangle {
+	double x1, y1;
+	double x2, y2;
+	double x3, y3;
+	int drawing_state;
+	int w;
+	int selected;
+	int order;
+	int c;
+};
+
+struct penta {
+	double rad;
+	double x, y;
+	double angle;
+	int drawing_state;
+	int w;
+	int selected;
+	int order;
+	int c;
 };
 
 struct line line[MAX_ARGS];
 struct rect rect[MAX_ARGS];
 struct circle circle[MAX_ARGS];
+struct triangle triangle[MAX_ARGS];
+struct penta penta[MAX_ARGS];
 
 int num_line = 0;
 int num_rect = 0;
 int num_circle = 0;
+int num_triangle = 0;
+int num_penta = 0;
 
-int selected_shape[MAX_MULT_S];
-int selected_num[MAX_MULT_S];
-int selected_x[MAX_MULT_S], selected_y[MAX_MULT_S];
+int selected_shape;
+int selected_num;
+double selected_x, selected_y;
 int selected_count = 0;
-double min_distance[MAX_MULT_S];
+double min_distance = 10;
 
-double get_distance(int x1, int y1, int x2, int y2) {
+double get_distance(double x1, double y1, double x2, double y2) {
 
 	return sqrt((x2 - x1)*(x2 - x1) + (y2 - y1)*(y2 - y1));
 
 }
 
-void find_min_dist() {
+int find_min_dist() {
 	// line part
 	for (int i = 0; i < num_line; i++) {
 		if (mode_selection == 0) {
-			if (get_distance(line[i].x1, line[i].y1, mouseX, mouseY) < min_distance[i]) {
-				min_distance[i] = get_distance(line[i].x1, line[i].y1, mouseX, mouseY);
-				selected_num[selected_count] = i;
-				selected_shape[selected_count] = 0;
-				selected_x[selected_count] = line[i].x1;
-				selected_y[selected_count] = line[i].y1;
+			if (get_distance(line[i].x1, line[i].y1, mouseX, mouseY) < min_distance) {
+				min_distance = get_distance(line[i].x1, line[i].y1, mouseX, mouseY);
+				selected_shape = 0;
+				selected_num = i;
+				selected_x = line[i].x1;
+				selected_y = line[i].y1;
 			}
-			if (get_distance(line[i].x2, line[i].y2, mouseX, mouseY) < min_distance[i]) {
-				min_distance[i] = get_distance(line[i].x2, line[i].y2, mouseX, mouseY);
-				selected_num[selected_count] = i;
-				selected_shape[selected_count] = 0;
-				selected_x[selected_count] = line[i].x2;
-				selected_y[selected_count] = line[i].y2;
+			if (get_distance(line[i].x2, line[i].y2, mouseX, mouseY) < min_distance) {
+				min_distance = get_distance(line[i].x2, line[i].y2, mouseX, mouseY);
+				selected_shape = 0;
+				selected_num = i;
+				selected_x = line[i].x2;
+				selected_y = line[i].y2;
 			}
 		}
 		else if (mode_selection == 1) {
-			if (get_distance((line[i].x1+line[i].x2)/2, (line[i].y1+line[i].y2)/2, mouseX, mouseY) < min_distance[i]) {
-				min_distance[i] = get_distance((line[i].x1 + line[i].x2) / 2, (line[i].y1 + line[i].y2) / 2, mouseX, mouseY);
-				selected_num[selected_count] = i;
-				selected_shape[selected_count] = 0;
-				selected_x[selected_count] = (line[i].x1 + line[i].x2) / 2;
-				selected_y[selected_count] = (line[i].y1 + line[i].y2) / 2;
+			if (get_distance((line[i].x1+line[i].x2)/2, (line[i].y1+line[i].y2)/2, mouseX, mouseY) < min_distance) {
+				min_distance = get_distance((line[i].x1 + line[i].x2) / 2, (line[i].y1 + line[i].y2) / 2, mouseX, mouseY);
+				selected_shape = 0;
+				selected_num = i;
+				selected_x = (line[i].x1 + line[i].x2) / 2;
+				selected_y = (line[i].y1 + line[i].y2) / 2;
 			}
 		}
 	}
 	// rect part
 	for (int i = 0; i < num_rect; i++) {
 		if (mode_selection == 0) {
-			if (get_distance(rect[i].x1, rect[i].y1, mouseX, mouseY) < min_distance[i]) {
-				min_distance[i] = get_distance(rect[i].x1, rect[i].y1, mouseX, mouseY);
-				selected_num[selected_count] = i;
-				selected_shape[selected_count] = 1;
-				selected_x[selected_count] = rect[i].x1;
-				selected_y[selected_count] = rect[i].y1;
+			if (get_distance(rect[i].x1, rect[i].y1, mouseX, mouseY) < min_distance) {
+				min_distance = get_distance(rect[i].x1, rect[i].y1, mouseX, mouseY);
+				selected_num = i;
+				selected_shape = 1;
+				selected_x = rect[i].x1;
+				selected_y = rect[i].y1;
 			}
-			if (get_distance(rect[i].x2, rect[i].y2, mouseX, mouseY) < min_distance[i]) {
-				min_distance[i] = get_distance(rect[i].x2, rect[i].y2, mouseX, mouseY);
-				selected_num[selected_count] = i;
-				selected_shape[selected_count] = 1;
-				selected_x[selected_count] = rect[i].x2;
-				selected_y[selected_count] = rect[i].y2;
+			if (get_distance(rect[i].x2, rect[i].y2, mouseX, mouseY) < min_distance) {
+				min_distance = get_distance(rect[i].x2, rect[i].y2, mouseX, mouseY);
+				selected_num = i;
+				selected_shape = 1;
+				selected_x = rect[i].x2;
+				selected_y = rect[i].y2;
 			}
-			if (get_distance(rect[i].x3, rect[i].y3, mouseX, mouseY) < min_distance[i]) {
-				min_distance[i] = get_distance(rect[i].x3, rect[i].y3, mouseX, mouseY);
-				selected_num[selected_count] = i;
-				selected_shape[selected_count] = 1;
-				selected_x[selected_count] = rect[i].x3;
-				selected_y[selected_count] = rect[i].y3;
+			if (get_distance(rect[i].x3, rect[i].y3, mouseX, mouseY) < min_distance) {
+				min_distance = get_distance(rect[i].x3, rect[i].y3, mouseX, mouseY);
+				selected_num = i;
+				selected_shape = 1;
+				selected_x = rect[i].x3;
+				selected_y = rect[i].y3;
 			}
-			if (get_distance(rect[i].x4, rect[i].y4, mouseX, mouseY) < min_distance[i]) {
-				min_distance[i] = get_distance(rect[i].x4, rect[i].y4, mouseX, mouseY);
-				selected_num[selected_count] = i;
-				selected_shape[selected_count] = 1;
-				selected_x[selected_count] = rect[i].x4;
-				selected_y[selected_count] = rect[i].y4;
+			if (get_distance(rect[i].x4, rect[i].y4, mouseX, mouseY) < min_distance) {
+				min_distance = get_distance(rect[i].x4, rect[i].y4, mouseX, mouseY);
+				selected_num = i;
+				selected_shape = 1;
+				selected_x = rect[i].x4;
+				selected_y = rect[i].y4;
 			}
 		}
 		else if (mode_selection == 1) {
-			if (get_distance((rect[i].x1 + rect[i].x2) / 2, (rect[i].y1 + rect[i].y2) / 2, mouseX, mouseY) < min_distance[i]) {
-				min_distance[i] = get_distance((rect[i].x1 + rect[i].x2) / 2, (rect[i].y1 + rect[i].y2) / 2, mouseX, mouseY);
-				selected_num[selected_count] = i;
-				selected_shape[selected_count] = 1;
-				selected_x[selected_count] = (rect[i].x1 + rect[i].x2) / 2;
-				selected_y[selected_count] = (rect[i].y1 + rect[i].y2) / 2;
+			if (get_distance((rect[i].x1 + rect[i].x2) / 2, (rect[i].y1 + rect[i].y2) / 2, mouseX, mouseY) < min_distance) {
+				min_distance = get_distance((rect[i].x1 + rect[i].x2) / 2, (rect[i].y1 + rect[i].y2) / 2, mouseX, mouseY);
+				selected_num = i;
+				selected_shape = 1;
+				selected_x = (rect[i].x1 + rect[i].x2) / 2;
+				selected_y = (rect[i].y1 + rect[i].y2) / 2;
 			}
 		}
 	}
 	// circle part
 	for (int i = 0; i < num_circle; i++) {
-		if (get_distance(circle[i].x, circle[i].y, mouseX, mouseY) < min_distance[i]) {
-			min_distance[i] = get_distance(circle[i].x, circle[i].y, mouseX, mouseY);
-			selected_num[selected_count] = i;
-			selected_shape[selected_count] = 2;
-			selected_x[selected_count] = circle[i].x;
-			selected_y[selected_count] = circle[i].y;
+		if (get_distance(circle[i].x, circle[i].y, mouseX, mouseY) < min_distance) {
+			min_distance = get_distance(circle[i].x, circle[i].y, mouseX, mouseY);
+			selected_num = i;
+			selected_shape = 2;
+			selected_x = circle[i].x;
+			selected_y = circle[i].y;
 		}
 	}
+	// triangle part
+	for (int i = 0; i < num_triangle; i++) {
+		if (mode_selection == 0) {
+			if (get_distance(triangle[i].x1, triangle[i].y1, mouseX, mouseY) < min_distance) {
+				min_distance = get_distance(triangle[i].x1, triangle[i].y1, mouseX, mouseY);
+				selected_num = i;
+				selected_shape = 3;
+				selected_x = triangle[i].x1;
+				selected_y = triangle[i].y1;
+			}
+			if (get_distance(triangle[i].x2, triangle[i].y2, mouseX, mouseY) < min_distance) {
+				min_distance = get_distance(triangle[i].x2, triangle[i].y2, mouseX, mouseY);
+				selected_num = i;
+				selected_shape = 3;
+				selected_x = triangle[i].x2;
+				selected_y = triangle[i].y2;
+			}
+			if (get_distance(triangle[i].x3, triangle[i].y3, mouseX, mouseY) < min_distance) {
+				min_distance = get_distance(triangle[i].x3, triangle[i].y3, mouseX, mouseY);
+				selected_num = i;
+				selected_shape = 3;
+				selected_x = triangle[i].x3;
+				selected_y = triangle[i].y3;
+			}
+		}
+		else if (mode_selection == 1) {
+			if (get_distance((triangle[i].x1 + triangle[i].x2 + triangle[i].x3) / 3, (triangle[i].y1 + triangle[i].y2 + triangle[i].y3) / 3, mouseX, mouseY) < min_distance) {
+				min_distance = get_distance((triangle[i].x1 + triangle[i].x2 + triangle[i].x3) / 3, (triangle[i].y1 + triangle[i].y2 + triangle[i].y3) / 3, mouseX, mouseY);
+				selected_num = i;
+				selected_shape = 3;
+				selected_x = (triangle[i].x1 + triangle[i].x2 + triangle[i].x3) / 3;
+				selected_y = (triangle[i].y1 + triangle[i].y2 + triangle[i].y3) / 3;
+			}
+		}
+	}
+	// pentagon part
+	for (int i = 0; i < num_penta; i++) {
+		if (get_distance(penta[i].x, penta[i].y, mouseX, mouseY) < min_distance) {
+			min_distance = get_distance(penta[i].x, penta[i].y, mouseX, mouseY);
+			selected_num = i;
+			selected_shape = 4;
+			selected_x = penta[i].x;
+			selected_y = penta[i].y;
+		}
+	}
+	switch (selected_shape) {
+	case 0 :
+		if (line[selected_num].selected == 1) selected_count--;
+		line[selected_num].selected = 1;
+		break;
+	case 1:
+		if (rect[selected_num].selected == 1) selected_count--;
+		rect[selected_num].selected = 1;
+		break;
+	case 2:
+		if (circle[selected_num].selected == 1) selected_count--;
+		circle[selected_num].selected = 1;
+		break;
+	case 3:
+		if (triangle[selected_num].selected == 1) selected_count--;
+		triangle[selected_num].selected = 1;
+		break;
+	case 4:
+		if (penta[selected_num].selected == 1) selected_count--;
+		penta[selected_num].selected = 1;
+		break;
+	}
+	if (min_distance < 10) return 1;
+	else return 0;
 }
 
 void draw_text(const char *text, int length, int x, int y) {
@@ -232,13 +335,318 @@ void keyboard(unsigned char key, int x, int y)
 			text = "Triangle Mode";
 		}
 		break;
+	case 'p':
+		if (mode_program == 0) {
+			mode_drawing = 4;
+			text = "Pentagon Mode";
+		}
+		break;
 	case 'o':
 		if (mode_program == 1) {
 			mode_selection = 1;
 			text = "Rotation Mode";
 		}
 		break;
+	case 'm' :
+		if (mode_program == 1 && mode_selection == 0) {
+			text = "Selection Mode";
+		}
+		else if (mode_program == 1 && mode_selection == 1) {
+			text = "Rotation Mode";
+		}
+		mult_select = 1;
+		break;
+	case 'u' :
+		int undo_shape;
+		int undo_num;
+		for (int i = 0; i < num_line; i++) {
 
+			if (line[i].order == count-1) {
+
+				undo_shape = 0;
+				undo_num = i;
+			}
+		}
+		for (int i = 0; i < num_rect; i++) {
+
+			if (rect[i].order == count - 1) {
+				undo_shape = 1;
+				undo_num = i;
+			}
+		}
+		for (int i = 0; i < num_circle; i++) {
+
+			if (circle[i].order == count - 1) {
+				undo_shape = 2;
+				undo_num = i;
+			}
+		}
+		for (int i = 0; i < num_triangle; i++) {
+
+			if (triangle[i].order == count - 1) {
+				undo_shape = 3;
+				undo_num = i;
+			}
+		}
+		for (int i = 0; i < num_penta; i++) {
+
+			if (penta[i].order == count - 1) {
+				undo_shape = 4;
+				undo_num = i;
+			}
+		}
+		switch (undo_shape) {
+		case 0:
+			line[undo_num].x1 = 0;
+			line[undo_num].x2 = 0;
+			line[undo_num].y1 = 0;
+			line[undo_num].y2 = 0;
+			line[undo_num].drawing_state = 0;
+			num_line--;
+			count--;
+			break;
+		case 1:
+			rect[undo_num].x1 = 0;
+			rect[undo_num].x2 = 0;
+			rect[undo_num].x3 = 0;
+			rect[undo_num].x4 = 0;
+			rect[undo_num].y1 = 0;
+			rect[undo_num].y2 = 0;
+			rect[undo_num].y3 = 0;
+			rect[undo_num].y4 = 0;
+
+			rect[undo_num].drawing_state = 0;
+			rect[undo_num].selected = 0;
+			num_rect--;
+			count--;
+			break;
+		case 2:
+			circle[undo_num].x = 0;
+			circle[undo_num].y = 0;
+			circle[undo_num].rad = 0;
+			circle[undo_num].drawing_state = 0;
+			circle[undo_num].selected = 0;
+			num_circle--;
+			count--;
+			break;
+		case 3:
+			triangle[undo_num].x1 = 0;
+			triangle[undo_num].x2 = 0;
+			triangle[undo_num].x3 = 0;
+			triangle[undo_num].y1 = 0;
+			triangle[undo_num].y2 = 0;
+			triangle[undo_num].y3 = 0;
+
+			triangle[undo_num].drawing_state = 0;
+			triangle[undo_num].selected = 0;
+			num_triangle--;
+			count--;
+			break;
+		case 4:
+			penta[undo_num].x = 0;
+			penta[undo_num].y = 0;
+			penta[undo_num].rad = 0;
+			penta[undo_num].drawing_state = 0;
+			penta[undo_num].selected = 0;
+			num_penta--;
+			count--;
+			break;
+		}
+		if(count < 0) count = 0;
+		break;
+	case 'e' :
+		for (int i = 0; i < num_line; i++) {
+			line[i].x1 = 0;
+			line[i].x2 = 0;
+			line[i].y1 = 0;
+			line[i].y2 = 0;
+			line[i].drawing_state = 0;
+			line[i].selected = 0;
+		}
+		for (int i = 0; i < num_rect; i++) {
+			rect[i].x1 = 0;
+			rect[i].x2 = 0;
+			rect[i].x3 = 0;
+			rect[i].x4 = 0;
+			rect[i].y1 = 0;
+			rect[i].y2 = 0;
+			rect[i].y3 = 0;
+			rect[i].y4 = 0;
+			rect[i].drawing_state = 0;
+			rect[i].selected = 0;
+		}
+		for (int i = 0; i < num_circle; i++) {
+			circle[i].x = 0;
+			circle[i].y = 0;
+			circle[i].drawing_state = 0;
+			circle[i].selected = 0;
+			circle[i].rad = 0;
+		}
+		for (int i = 0; i < num_triangle; i++) {
+			triangle[i].x1 = 0;
+			triangle[i].x2 = 0;
+			triangle[i].x3 = 0;
+			triangle[i].y1 = 0;
+			triangle[i].y2 = 0;
+			triangle[i].y3 = 0;
+			triangle[i].drawing_state = 0;
+			triangle[i].selected = 0;
+		}
+		for (int i = 0; i < num_penta; i++) {
+			penta[i].x = 0;
+			penta[i].y = 0;
+			penta[i].drawing_state = 0;
+			penta[i].selected = 0;
+			penta[i].rad = 0;
+		}
+		num_line = 0;
+		num_rect = 0;
+		num_circle = 0;
+		num_triangle = 0;
+		num_penta = 0;
+		move_x = 0;
+		move_y = 0;
+		move_angle = 0;
+		count = 0;
+		break;
+	case 'z' :
+		fp = fopen("data.txt", "wt");
+		if (fp == NULL) {
+			printf(" file open failed");
+			break;
+		}
+		fprintf(fp, "%d\n", count);
+		fprintf(fp, "%d\n", num_line);
+		for (int i = 0; i < num_line; i++) {
+			fprintf(fp, "%lf %lf %lf %lf %d %d %d %d\n", line[i].x1, line[i].y1, line[i].x2, line[i].y2, line[i].w, line[i].drawing_state, line[i].selected, line[i].order);
+		}
+		fprintf(fp, "%d\n", num_rect);
+		for (int i = 0; i < num_rect; i++) {
+			fprintf(fp, "%lf %lf %lf %lf %lf %lf %lf %lf %d %d %d %d\n", rect[i].x1, rect[i].y1, rect[i].x2, rect[i].y2, rect[i].x3, rect[i].y3, rect[i].x4, rect[i].y4, rect[i].w, rect[i].drawing_state, rect[i].selected, rect[i].order);
+		}
+		fprintf(fp, "%d\n", num_circle);
+		for (int i = 0; i < num_circle; i++) {
+			fprintf(fp, "%lf %lf %lf %d %d %d %d\n", circle[i].rad, circle[i].x, circle[i].y, circle[i].w, circle[i].drawing_state, circle[i].selected, circle[i].order);
+		}
+		fprintf(fp, "%d\n", num_triangle);
+		for (int i = 0; i < num_triangle; i++) {
+			fprintf(fp, "%lf %lf %lf %lf %lf %lf %d %d %d %d\n", triangle[i].x1, triangle[i].y1, triangle[i].x2, triangle[i].y2, triangle[i].x3, triangle[i].y3, triangle[i].w, triangle[i].drawing_state, triangle[i].selected, triangle[i].order);
+		}
+		fprintf(fp, "%d\n", num_penta);
+		for (int i = 0; i < num_penta; i++) {
+			fprintf(fp, "%lf %lf %lf %d %d %d %d\n", penta[i].rad, penta[i].x, penta[i].y, penta[i].w, penta[i].drawing_state, penta[i].selected, penta[i].order);
+		}
+		fclose(fp);
+		break;
+	case 'x':
+
+		for (int i = 0; i < num_line; i++) {
+			line[i].x1 = 0;
+			line[i].x2 = 0;
+			line[i].y1 = 0;
+			line[i].y2 = 0;
+			line[i].drawing_state = 0;
+			line[i].selected = 0;
+		}
+		for (int i = 0; i < num_rect; i++) {
+			rect[i].x1 = 0;
+			rect[i].x2 = 0;
+			rect[i].x3 = 0;
+			rect[i].x4 = 0;
+			rect[i].y1 = 0;
+			rect[i].y2 = 0;
+			rect[i].y3 = 0;
+			rect[i].y4 = 0;
+			rect[i].drawing_state = 0;
+			rect[i].selected = 0;
+		}
+		for (int i = 0; i < num_circle; i++) {
+			circle[i].x = 0;
+			circle[i].y = 0;
+			circle[i].drawing_state = 0;
+			circle[i].selected = 0;
+			circle[i].rad = 0;
+		}
+		for (int i = 0; i < num_triangle; i++) {
+			triangle[i].x1 = 0;
+			triangle[i].x2 = 0;
+			triangle[i].x3 = 0;
+			triangle[i].y1 = 0;
+			triangle[i].y2 = 0;
+			triangle[i].y3 = 0;
+			triangle[i].drawing_state = 0;
+			triangle[i].selected = 0;
+		}
+		for (int i = 0; i < num_penta; i++) {
+			penta[i].x = 0;
+			penta[i].y = 0;
+			penta[i].drawing_state = 0;
+			penta[i].selected = 0;
+			penta[i].rad = 0;
+		}
+		num_line = 0;
+		num_rect = 0;
+		num_circle = 0;
+		num_triangle = 0;
+		num_penta = 0;
+		move_x = 0;
+		move_y = 0;
+		move_angle = 0;
+		count = 0;
+
+
+		fp = fopen("data.txt", "rt");
+		if (fp == NULL) {
+			printf("file open failed");
+			break;
+		}
+		fscanf(fp, "%d\n", &count);
+		fscanf(fp, "%d\n", &num_line);
+		for (int i = 0; i < num_line; i++) {
+			fscanf(fp, "%lf %lf %lf %lf %d %d %d %d\n", &line[i].x1, &line[i].y1, &line[i].x2, &line[i].y2, &line[i].w, &line[i].drawing_state, &line[i].selected, &line[i].order);
+		}
+		fscanf(fp, "%d\n", &num_rect);
+		for (int i = 0; i < num_rect; i++) {
+			fscanf(fp, "%lf %lf %lf %lf %lf %lf %lf %lf %d %d %d %d\n", &rect[i].x1, &rect[i].y1, &rect[i].x2, &rect[i].y2, &rect[i].x3, &rect[i].y3, &rect[i].x4, &rect[i].y4, &rect[i].w, &rect[i].drawing_state, &rect[i].selected, &rect[i].order);
+		}
+		fscanf(fp, "%d\n", &num_circle);
+		for (int i = 0; i < num_circle; i++) {
+			fscanf(fp, "%lf %lf %lf %d %d %d %d\n", &circle[i].rad, &circle[i].x, &circle[i].y, &circle[i].w, &circle[i].drawing_state, &circle[i].selected, &circle[i].order);
+		}
+		fscanf(fp, "%d\n", &num_triangle);
+		for (int i = 0; i < num_triangle; i++) {
+			fscanf(fp, "%lf %lf %lf %lf %lf %lf %d %d %d %d\n", &triangle[i].x1, &triangle[i].y1, &triangle[i].x2, &triangle[i].y2, &triangle[i].x3, &triangle[i].y3, &triangle[i].w, &triangle[i].drawing_state, &triangle[i].selected, &triangle[i].order);
+		}
+		fscanf(fp, "%d\n", &num_penta);
+		for (int i = 0; i < num_penta; i++) {
+			fscanf(fp, "%lf %lf %lf %d %d %d %d\n", &penta[i].rad, &penta[i].x, &penta[i].y, &penta[i].w, &penta[i].drawing_state, &penta[i].selected, &penta[i].order);
+		}
+		fclose(fp);
+		break;
+	case '1' :
+		line_width = 1;
+		break;
+	case '2':
+		line_width = 2;
+		break;
+	case '3':
+		line_width = 3;
+		break;
+	case '4':
+		line_width = 4;
+		break;
+	case '5':
+		line_width = 5;
+		break;
+	case '6':
+		line_color = 0;
+		break;
+	case '7':
+		line_color = 1;
+		break;
+	case '8':
+		line_color = 2;
+		break;
 	case 27:  // ASCII value 27 = ESC key
 		exit(0);
 		break;
@@ -246,13 +654,21 @@ void keyboard(unsigned char key, int x, int y)
 		text = "Hi, This is drawing pad!";
 		break;
 	}
-		
+
 }
 
+void keyboard_up(unsigned char key, int x, int y) {
+    switch (key) {
+	case 'm' :
+		mult_select = 0;
+		break;
+    }
+}
 // MousePress: Called when mouse is pressed.  Most likely the mouseMotion func will
 // be called immediately afterwards if the mouse button is still down.
 // NOTE: a single click will cause this function to be called twice
 // once for GLUT_DOWN and once for GLUT_UP
+
 void mousePress(GLint button, GLint state, GLint x, GLint y)
 {
 	if (button == GLUT_LEFT_BUTTON  && state == GLUT_DOWN)
@@ -265,33 +681,59 @@ void mousePress(GLint button, GLint state, GLint x, GLint y)
 			switch (mode_drawing) {
 			case 0:
 				line[num_line].drawing_state = 1;
-
 				line[num_line].x1 = mouseX;
 				line[num_line].y1 = mouseY;
+				line[num_line].w = line_width;
+				line[num_line].c = line_color;
 				break;
 			case 1:
 				rect[num_rect].drawing_state = 1;
 
 				rect[num_rect].x1 = mouseX;
 				rect[num_rect].y1 = mouseY;
+				rect[num_rect].w = line_width;
+				rect[num_rect].c = line_color;
 				break;
 			case 2:
 				circle[num_circle].drawing_state = 1;
 
 				circle[num_circle].x = mouseX;
 				circle[num_circle].y = mouseY;
+				circle[num_circle].w = line_width;
+				circle[num_circle].c = line_color;
+				break;
+			case 3:
+				triangle[num_triangle].drawing_state = 1;
+
+				triangle[num_triangle].x1 = mouseX;
+				triangle[num_triangle].y1 = mouseY;
+				triangle[num_triangle].w = line_width;
+				triangle[num_triangle].c = line_color;
+				break;
+			case 4:
+				penta[num_penta].drawing_state = 1;
+
+				penta[num_penta].x = mouseX;
+				penta[num_penta].y = mouseY;
+				penta[num_penta].w = line_width;
+				penta[num_penta].c = line_color;
 				break;
 			}
 		}
 
 		else if (mode_program == 1) {
-			find_min_dist();
-			selected_count++;
+			if (find_min_dist() == 1) {
+				selected_count++;
+//				selected_x = mouseX;
+//				selected_y = mouseY;
+			}
+
 		}
-		
+
 
 		glutPostRedisplay();
 	}
+
 	if (button == GLUT_LEFT_BUTTON  && state == GLUT_UP)
 	{
 		printf("LEFT Mouse Up\n");
@@ -305,7 +747,9 @@ void mousePress(GLint button, GLint state, GLint x, GLint y)
 
 				line[num_line].x2 = mouseX;
 				line[num_line].y2 = mouseY;
+				line[num_line].order = count;
 				num_line++;
+				count++;
 				break;
 			case 1:
 				rect[num_rect].drawing_state = 0;
@@ -318,161 +762,248 @@ void mousePress(GLint button, GLint state, GLint x, GLint y)
 				rect[num_rect].y4 = rect[num_rect].y1;
 
 				num_rect++;
+				rect[num_rect-1].order = count;
+				count++;
 				break;
 			case 2:
 				circle[num_circle].drawing_state = 0;
 
 				circle[num_circle].rad = get_distance(circle[num_circle].x, circle[num_circle].y, mouseX, mouseY);
 				num_circle++;
+				circle[num_circle-1].order = count;
+				count++;
+				break;
+			case 3:
+				triangle[num_triangle].drawing_state = 0;
+
+				triangle[num_triangle].x2 = mouseX;
+				triangle[num_triangle].y2 = mouseY;
+				triangle[num_triangle].x3 = 2*triangle[num_triangle].x1-mouseX;
+				triangle[num_triangle].y3 = mouseY;
+				num_triangle++;
+				triangle[num_triangle-1].order = count;
+				count++;
+				break;
+			case 4:
+				penta[num_penta].drawing_state = 0;
+
+				penta[num_penta].rad = get_distance(penta[num_penta].x, penta[num_penta].y, mouseX, mouseY);
+				num_penta++;
+				penta[num_penta - 1].order = count;
+				count++;
 				break;
 			}
 		}
 
 		else if (mode_program == 1 && mode_selection == 0) {
-			for (int i = 0; i < selected_count; i++) {
-				switch (selected_shape[i]) {
-				case 0:
-					line[selected_num[i]].x1 += line[selected_num[i]].t_x;
-					line[selected_num[i]].x2 += line[selected_num[i]].t_x;
-					line[selected_num[i]].y1 += line[selected_num[i]].t_y;
-					line[selected_num[i]].y2 += line[selected_num[i]].t_y;
-					line[selected_num[i]].t_x = 0;
-					line[selected_num[i]].t_y = 0;
-				case 1:
-					rect[selected_num[i]].x1 += rect[selected_num[i]].t_x;
-					rect[selected_num[i]].x2 += rect[selected_num[i]].t_x;
-					rect[selected_num[i]].x3 += rect[selected_num[i]].t_x;
-					rect[selected_num[i]].x4 += rect[selected_num[i]].t_x;
-					rect[selected_num[i]].y1 += rect[selected_num[i]].t_y;
-					rect[selected_num[i]].y2 += rect[selected_num[i]].t_y;
-					rect[selected_num[i]].y3 += rect[selected_num[i]].t_y;
-					rect[selected_num[i]].y4 += rect[selected_num[i]].t_y;
-					rect[selected_num[i]].t_x = 0;
-					rect[selected_num[i]].t_y = 0;
-				case 2:
-					circle[selected_num[i]].x += circle[selected_num[i]].t_x;
-					circle[selected_num[i]].y += circle[selected_num[i]].t_y;
-					circle[selected_num[i]].t_x = 0;
-					circle[selected_num[i]].t_y = 0;
+			for (int i = 0; i < MAX_ARGS; i++) {
+				if (line[i].selected == 1) {
+					line[i].x1 += move_x;
+					line[i].x2 += move_x;
+					line[i].y1 += move_y;
+					line[i].y2 += move_y;
+					selected_x += move_x;
+					selected_y += move_y;
+	//				printf("%d %d\n", selected_x, selected_y);
+				}
+				if (rect[i].selected == 1) {
+					rect[i].x1 += move_x;
+					rect[i].x2 += move_x;
+					rect[i].x3 += move_x;
+					rect[i].x4 += move_x;
+					rect[i].y1 += move_y;
+					rect[i].y2 += move_y;
+					rect[i].y3 += move_y;
+					rect[i].y4 += move_y;
+					selected_x += move_x;
+					selected_y += move_y;
+				}
+				if (circle[i].selected == 1) {
+					circle[i].x += move_x;
+					circle[i].y += move_y;
+					selected_x += move_x;
+					selected_y += move_y;
+				}
+				if (triangle[i].selected == 1) {
+					triangle[i].x1 += move_x;
+					triangle[i].x2 += move_x;
+					triangle[i].x3 += move_x;
+					triangle[i].y1 += move_y;
+					triangle[i].y2 += move_y;
+					triangle[i].y3 += move_y;
+					selected_x += move_x;
+					selected_y += move_y;
+				}
+				if (penta[i].selected == 1) {
+					penta[i].x += move_x;
+					penta[i].y += move_y;
+					selected_x += move_x;
+					selected_y += move_y;
 				}
 			}
 			if (mult_select == 0) {
-				for (int i = 0; i < selected_count; i++) {
-					selected_shape[i] = -1;
-					selected_num[i] = -1;
-					selected_x[i] = -1;
-					selected_y[i] = -1;
-					min_distance[i] = 10;
+				for (int i = 0; i < MAX_ARGS; i++) {
+					line[i].selected = 0;
+					rect[i].selected = 0;
+					circle[i].selected = 0;
+					triangle[i].selected = 0;
+					penta[i].selected = 0;
 				}
+				min_distance = 10;
 				selected_count = 0;
+				selected_shape = -1;
+				selected_num = -1;
+
 			}
+			move_x = 0;
+			move_y = 0;
+			min_distance = 10;
 		}
 		else if (mode_program == 1 && mode_selection == 1) {
 			double temp_angle;
-			int temp1_x1, temp1_y1, temp1_x2, temp1_y2, temp1_x3, temp1_y3, temp1_x4, temp1_y4;
-			int temp2_x1, temp2_y1, temp2_x2, temp2_y2, temp2_x3, temp2_y3, temp2_x4, temp2_y4;
-			for (int i = 0; i < selected_count; i++) {
-				switch (selected_shape[i]) {
-				case 0:
-					temp_angle = line[selected_num[i]].r_a * 3.141592 / 180;
-					temp1_x1 = line[selected_num[i]].x1;
-					temp1_y1 = line[selected_num[i]].y1;
-					temp1_x2 = line[selected_num[i]].x2;
-					temp1_y2 = line[selected_num[i]].y2;
+			double temp1_x1, temp1_y1, temp1_x2, temp1_y2, temp1_x3, temp1_y3, temp1_x4, temp1_y4;
+			double temp2_x1, temp2_y1, temp2_x2, temp2_y2, temp2_x3, temp2_y3, temp2_x4, temp2_y4;
+			for (int i = 0; i < MAX_ARGS; i++) {
+				if (line[i].selected == 1) {
+					temp_angle = move_angle * 3.141592 / 180;
+					temp1_x1 = line[i].x1;
+					temp1_y1 = line[i].y1;
+					temp1_x2 = line[i].x2;
+					temp1_y2 = line[i].y2;
 
-					line[selected_num[i]].x1 -= (int)((double)(temp1_x1 + temp1_x2) / 2.0);
-					line[selected_num[i]].x2 -= (int)((double)(temp1_x1 + temp1_x2) / 2.0);
-					line[selected_num[i]].y1 -= (int)((double)(temp1_y1 + temp1_y2) / 2.0);
-					line[selected_num[i]].y2 -= (int)((double)(temp1_y1 + temp1_y2) / 2.0);
+					line[i].x1 -= ((double)(temp1_x1 + temp1_x2) / 2.0);
+					line[i].x2 -= ((double)(temp1_x1 + temp1_x2) / 2.0);
+					line[i].y1 -= ((double)(temp1_y1 + temp1_y2) / 2.0);
+					line[i].y2 -= ((double)(temp1_y1 + temp1_y2) / 2.0);
 
-					temp2_x1 = line[selected_num[i]].x1;
-					temp2_y1 = line[selected_num[i]].y1;
-					temp2_x2 = line[selected_num[i]].x2;
-					temp2_y2 = line[selected_num[i]].y2;
+					temp2_x1 = line[i].x1;
+					temp2_y1 = line[i].y1;
+					temp2_x2 = line[i].x2;
+					temp2_y2 = line[i].y2;
 
-					line[selected_num[i]].x1 = (int)((double)temp2_x1*cos(temp_angle) - (double)temp2_y1*sin(temp_angle));
-					line[selected_num[i]].x2 = (int)((double)temp2_x2*cos(temp_angle) - (double)temp2_y2*sin(temp_angle));
-					line[selected_num[i]].y1 = (int)((double)temp2_x1*sin(temp_angle) + (double)temp2_y1*cos(temp_angle));
-					line[selected_num[i]].y2 = (int)((double)temp2_x2*sin(temp_angle) + (double)temp2_y2*cos(temp_angle));
+					line[i].x1 = ((double)temp2_x1*cos(temp_angle) - (double)temp2_y1*sin(temp_angle));
+					line[i].x2 = ((double)temp2_x2*cos(temp_angle) - (double)temp2_y2*sin(temp_angle));
+					line[i].y1 = ((double)temp2_x1*sin(temp_angle) + (double)temp2_y1*cos(temp_angle));
+					line[i].y2 = ((double)temp2_x2*sin(temp_angle) + (double)temp2_y2*cos(temp_angle));
 
-					line[selected_num[i]].x1 += (int)((double)(temp1_x1 + temp1_x2) / 2.0);
-					line[selected_num[i]].x2 += (int)((double)(temp1_x1 + temp1_x2) / 2.0);
-					line[selected_num[i]].y1 += (int)((double)(temp1_y1 + temp1_y2) / 2.0);
-					line[selected_num[i]].y2 += (int)((double)(temp1_y1 + temp1_y2) / 2.0);
-					line[selected_num[i]].r_a = 0;
-				case 1:
-					temp_angle = rect[selected_num[i]].r_a * 3.141592 / 180;
-					temp1_x1 = rect[selected_num[i]].x1;
-					temp1_y1 = rect[selected_num[i]].y1;
-					temp1_x2 = rect[selected_num[i]].x2;
-					temp1_y2 = rect[selected_num[i]].y2;
-					temp1_x3 = rect[selected_num[i]].x3;
-					temp1_y3 = rect[selected_num[i]].y3;
-					temp1_x4 = rect[selected_num[i]].x4;
-					temp1_y4 = rect[selected_num[i]].y4;
+					line[i].x1 += ((double)(temp1_x1 + temp1_x2) / 2.0);
+					line[i].x2 += ((double)(temp1_x1 + temp1_x2) / 2.0);
+					line[i].y1 += ((double)(temp1_y1 + temp1_y2) / 2.0);
+					line[i].y2 += ((double)(temp1_y1 + temp1_y2) / 2.0);
+				}
+				if (rect[i].selected == 1) {
 
-					rect[selected_num[i]].x1 -= (int)((double)(temp1_x1 + temp1_x2) / 2.0);
-					rect[selected_num[i]].x2 -= (int)((double)(temp1_x1 + temp1_x2) / 2.0);
-					rect[selected_num[i]].y1 -= (int)((double)(temp1_y1 + temp1_y2) / 2.0);
-					rect[selected_num[i]].y2 -= (int)((double)(temp1_y1 + temp1_y2) / 2.0);
-					rect[selected_num[i]].x3 -= (int)((double)(temp1_x1 + temp1_x2) / 2.0);
-					rect[selected_num[i]].x4 -= (int)((double)(temp1_x1 + temp1_x2) / 2.0);
-					rect[selected_num[i]].y3 -= (int)((double)(temp1_y1 + temp1_y2) / 2.0);
-					rect[selected_num[i]].y4 -= (int)((double)(temp1_y1 + temp1_y2) / 2.0);
+					temp_angle = move_angle * 3.141592 / 180;
+					temp1_x1 = rect[i].x1;
+					temp1_y1 = rect[i].y1;
+					temp1_x2 = rect[i].x2;
+					temp1_y2 = rect[i].y2;
+					temp1_x3 = rect[i].x3;
+					temp1_y3 = rect[i].y3;
+					temp1_x4 = rect[i].x4;
+					temp1_y4 = rect[i].y4;
 
-					temp2_x1 = rect[selected_num[i]].x1;
-					temp2_y1 = rect[selected_num[i]].y1;
-					temp2_x2 = rect[selected_num[i]].x2;
-					temp2_y2 = rect[selected_num[i]].y2;
-					temp2_x3 = rect[selected_num[i]].x3;
-					temp2_y3 = rect[selected_num[i]].y3;
-					temp2_x4 = rect[selected_num[i]].x4;
-					temp2_y4 = rect[selected_num[i]].y4;
+					rect[i].x1 -= ((double)(temp1_x1 + temp1_x2) / 2.0);
+					rect[i].x2 -= ((double)(temp1_x1 + temp1_x2) / 2.0);
+					rect[i].y1 -= ((double)(temp1_y1 + temp1_y2) / 2.0);
+					rect[i].y2 -= ((double)(temp1_y1 + temp1_y2) / 2.0);
+					rect[i].x3 -= ((double)(temp1_x1 + temp1_x2) / 2.0);
+					rect[i].x4 -= ((double)(temp1_x1 + temp1_x2) / 2.0);
+					rect[i].y3 -= ((double)(temp1_y1 + temp1_y2) / 2.0);
+					rect[i].y4 -= ((double)(temp1_y1 + temp1_y2) / 2.0);
 
-					rect[selected_num[i]].x1 = (int)((double)temp2_x1*cos(temp_angle) - (double)temp2_y1*sin(temp_angle));
-					rect[selected_num[i]].x2 = (int)((double)temp2_x2*cos(temp_angle) - (double)temp2_y2*sin(temp_angle));
-					rect[selected_num[i]].y1 = (int)((double)temp2_x1*sin(temp_angle) + (double)temp2_y1*cos(temp_angle));
-					rect[selected_num[i]].y2 = (int)((double)temp2_x2*sin(temp_angle) + (double)temp2_y2*cos(temp_angle));
-					rect[selected_num[i]].x3 = (int)((double)temp2_x3*cos(temp_angle) - (double)temp2_y3*sin(temp_angle));
-					rect[selected_num[i]].x4 = (int)((double)temp2_x4*cos(temp_angle) - (double)temp2_y4*sin(temp_angle));
-					rect[selected_num[i]].y3 = (int)((double)temp2_x3*sin(temp_angle) + (double)temp2_y3*cos(temp_angle));
-					rect[selected_num[i]].y4 = (int)((double)temp2_x4*sin(temp_angle) + (double)temp2_y4*cos(temp_angle));
+					temp2_x1 = rect[i].x1;
+					temp2_y1 = rect[i].y1;
+					temp2_x2 = rect[i].x2;
+					temp2_y2 = rect[i].y2;
+					temp2_x3 = rect[i].x3;
+					temp2_y3 = rect[i].y3;
+					temp2_x4 = rect[i].x4;
+					temp2_y4 = rect[i].y4;
 
-					rect[selected_num[i]].x1 += (int)((double)(temp1_x1 + temp1_x2) / 2.0);
-					rect[selected_num[i]].x2 += (int)((double)(temp1_x1 + temp1_x2) / 2.0);
-					rect[selected_num[i]].y1 += (int)((double)(temp1_y1 + temp1_y2) / 2.0);
-					rect[selected_num[i]].y2 += (int)((double)(temp1_y1 + temp1_y2) / 2.0);
-					rect[selected_num[i]].x3 += (int)((double)(temp1_x1 + temp1_x2) / 2.0);
-					rect[selected_num[i]].x4 += (int)((double)(temp1_x1 + temp1_x2) / 2.0);
-					rect[selected_num[i]].y3 += (int)((double)(temp1_y1 + temp1_y2) / 2.0);
-					rect[selected_num[i]].y4 += (int)((double)(temp1_y1 + temp1_y2) / 2.0);
-					rect[selected_num[i]].r_a = 0;
-				case 2:
-					circle[selected_num[i]].x += circle[selected_num[i]].t_x;
-					circle[selected_num[i]].y += circle[selected_num[i]].t_y;
-					circle[selected_num[i]].t_x = 0;
-					circle[selected_num[i]].t_y = 0;
+					rect[i].x1 = ((double)temp2_x1*cos(temp_angle) - (double)temp2_y1*sin(temp_angle));
+					rect[i].x2 = ((double)temp2_x2*cos(temp_angle) - (double)temp2_y2*sin(temp_angle));
+					rect[i].y1 = ((double)temp2_x1*sin(temp_angle) + (double)temp2_y1*cos(temp_angle));
+					rect[i].y2 = ((double)temp2_x2*sin(temp_angle) + (double)temp2_y2*cos(temp_angle));
+					rect[i].x3 = ((double)temp2_x3*cos(temp_angle) - (double)temp2_y3*sin(temp_angle));
+					rect[i].x4 = ((double)temp2_x4*cos(temp_angle) - (double)temp2_y4*sin(temp_angle));
+					rect[i].y3 = ((double)temp2_x3*sin(temp_angle) + (double)temp2_y3*cos(temp_angle));
+					rect[i].y4 = ((double)temp2_x4*sin(temp_angle) + (double)temp2_y4*cos(temp_angle));
+
+					rect[i].x1 += ((double)(temp1_x1 + temp1_x2) / 2.0);
+					rect[i].x2 += ((double)(temp1_x1 + temp1_x2) / 2.0);
+					rect[i].y1 += ((double)(temp1_y1 + temp1_y2) / 2.0);
+					rect[i].y2 += ((double)(temp1_y1 + temp1_y2) / 2.0);
+					rect[i].x3 += ((double)(temp1_x1 + temp1_x2) / 2.0);
+					rect[i].x4 += ((double)(temp1_x1 + temp1_x2) / 2.0);
+					rect[i].y3 += ((double)(temp1_y1 + temp1_y2) / 2.0);
+					rect[i].y4 += ((double)(temp1_y1 + temp1_y2) / 2.0);
+				}
+				if (circle[i].selected == 1) {
+				}
+				if (triangle[i].selected == 1) {
+
+					temp_angle = move_angle * 3.141592 / 180;
+					temp1_x1 = triangle[i].x1;
+					temp1_y1 = triangle[i].y1;
+					temp1_x2 = triangle[i].x2;
+					temp1_y2 = triangle[i].y2;
+					temp1_x3 = triangle[i].x3;
+					temp1_y3 = triangle[i].y3;
+
+
+					triangle[i].x1 -= ((double)(temp1_x1 + temp1_x2 + temp1_x3) / 3.0);
+					triangle[i].x2 -= ((double)(temp1_x1 + temp1_x2 + temp1_x3) / 3.0);
+					triangle[i].y1 -= ((double)(temp1_y1 + temp1_y2 + temp1_y3) / 3.0);
+					triangle[i].y2 -= ((double)(temp1_y1 + temp1_y2 + temp1_y3) / 3.0);
+					triangle[i].x3 -= ((double)(temp1_x1 + temp1_x2 + temp1_x3) / 3.0);
+					triangle[i].y3 -= ((double)(temp1_y1 + temp1_y2 + temp1_y3) / 3.0);
+
+					temp2_x1 = triangle[i].x1;
+					temp2_y1 = triangle[i].y1;
+					temp2_x2 = triangle[i].x2;
+					temp2_y2 = triangle[i].y2;
+					temp2_x3 = triangle[i].x3;
+					temp2_y3 = triangle[i].y3;
+
+					triangle[i].x1 = ((double)temp2_x1*cos(temp_angle) - (double)temp2_y1*sin(temp_angle));
+					triangle[i].x2 = ((double)temp2_x2*cos(temp_angle) - (double)temp2_y2*sin(temp_angle));
+					triangle[i].y1 = ((double)temp2_x1*sin(temp_angle) + (double)temp2_y1*cos(temp_angle));
+					triangle[i].y2 = ((double)temp2_x2*sin(temp_angle) + (double)temp2_y2*cos(temp_angle));
+					triangle[i].x3 = ((double)temp2_x3*cos(temp_angle) - (double)temp2_y3*sin(temp_angle));
+					triangle[i].y3 = ((double)temp2_x3*sin(temp_angle) + (double)temp2_y3*cos(temp_angle));
+
+					triangle[i].x1 += ((double)(temp1_x1 + temp1_x2 + temp1_x3) / 3.0);
+					triangle[i].x2 += ((double)(temp1_x1 + temp1_x2 + temp1_x3) / 3.0);
+					triangle[i].y1 += ((double)(temp1_y1 + temp1_y2 + temp1_y3) / 3.0);
+					triangle[i].y2 += ((double)(temp1_y1 + temp1_y2 + temp1_y3) / 3.0);
+					triangle[i].x3 += ((double)(temp1_x1 + temp1_x2 + temp1_x3) / 3.0);
+					triangle[i].y3 += ((double)(temp1_y1 + temp1_y2 + temp1_y3) / 3.0);
 				}
 
-				if (mult_select == 0) {
-					selected_shape[0] = -1;
-					selected_num[0] = -1;
-					selected_x[0] = -1;
-					selected_y[0] = -1;
-					min_distance[i] = 10;
+				if (penta[i].selected == 1) {
+					penta[i].angle += move_angle;
+					printf("%lf\n", move_angle);
 				}
-				else {
-					selected_shape[i] = -1;
-					selected_num[i] = -1;
-					selected_x[i] = -1;
-					selected_y[i] = -1;
-					min_distance[i] = 10;
-				}
-
 			}
+			if (mult_select == 0) {
+			  for (int i = 0; i < MAX_ARGS; i++) {
+			  line[i].selected = 0;
+			  rect[i].selected = 0;
+			  circle[i].selected = 0;
+			  triangle[i].selected = 0;
+			  penta[i].selected = 0;
+			  }
+			  min_distance = 10;
+			  selected_count = 0;
+			  selected_shape = -1;
+			  selected_num = -1;
+
+			  }
+			move_angle = 0;
+			min_distance = 10;
 		}
 		glutPostRedisplay();
-		
 	}
 
 	if (button == GLUT_RIGHT_BUTTON  && state == GLUT_DOWN)
@@ -499,142 +1030,153 @@ void mousePress(GLint button, GLint state, GLint x, GLint y)
 // mousePress callback
 	void mouseMotion(int x, int y)
 	{
-
-		int move_x, move_y;
-
 		mouseX = x;
 		mouseY = winH - y;
 		//	printf("Mouse motion (%i %i) with a button down \n", mouseX, mouseY); // we don't know which button!  Need a global to record it from mousePress() function
 
-		if (mode_program == 1 && mode_selection == 0) {
-			switch (selected_shape[selected_count]) {
-			case 0:
-				move_x = mouseX - selected_x[selected_count-1];
-				move_y = mouseY - selected_y[selected_count-1];
-				for (int i = 0; i < selected_count; i++) {
-					line[selected_num[i]].t_x = move_x;
-					line[selected_num[i]].t_y = move_y;
-				}
-				break;
-			case 1:
-				move_x = mouseX - selected_x[selected_count];
-				move_y = mouseY - selected_y[selected_count];
-				rect[selected_num[selected_count]].t_x = move_x;
-				rect[selected_num[selected_count]].t_y = move_y;
-				break;
-			case 2:
-				move_x = mouseX - selected_x[selected_count];
-				move_y = mouseY - selected_y[selected_count];
-				circle[selected_num[selected_count]].t_x = move_x;
-				circle[selected_num[selected_count]].t_y = move_y;
-				break;
-			}
+		if (mode_program == 1 && mode_selection == 0 && find_min_dist() == 1) {
+			move_x = mouseX - selected_x;
+			move_y = mouseY - selected_y;
 		}
-		else if (mode_program == 1 && mode_selection == 1) {
-			switch (selected_shape[selected_count]) {
-			case 0:
-				line[selected_num[selected_count]].r_a = get_distance(mouseX, mouseY, selected_x[selected_count], selected_y[selected_count]);
-				break;
-			case 1:
-				rect[selected_num[selected_count]].r_a = get_distance(mouseX, mouseY, selected_x[selected_count], selected_y[selected_count]);
-				break;
-			case 2:
-				circle[selected_num[selected_count]].r_a = get_distance(mouseX, mouseY, selected_x[selected_count], selected_y[selected_count]);
-				break;
-			}
+		else if (mode_program == 1 && mode_selection == 1 && find_min_dist() == 1) {
+			move_angle = get_distance(mouseX, mouseY, selected_x, selected_y);
 		}
-
 	glutPostRedisplay();
 }
 
 // call anytime mouse moves and no button presed
 void mousePassiveMotion(int x, int y)
 {
-//	printf("Mouse motion (%i %i) _no_ button pressed \n", x, winH - y); // we don't know which button!  Need a global to record it from mousePress() function
+	printf("Mouse motion (%i %i) _no_ button pressed \n", x, winH - y); // we don't know which button!  Need a global to record it from mousePress() function
 }
 
 void draw_line(int i) {
-	glLineWidth(2.0);
+	glLineWidth(line[i].w);
 	glPushMatrix();
-	glTranslated(line[i].t_x, line[i].t_y, 0);
+	if(line[i].selected == 1) glTranslated(move_x, move_y, 0);
 
-	for (int j = 0; j < selected_count; j++) {
-		if (mode_program == 1 && i == selected_num[j] && selected_shape[j] == 0 && mode_selection == 0) {
+	if (mode_program == 1 && mode_selection == 0 && line[i].selected == 1) {
 			glColor3f(1, 0, 0);
 			glBegin(GL_LINE_LOOP);
-			glVertex2i(selected_x[j] - 5, selected_y[j] - 5);
-			glVertex2i(selected_x[j] + 5, selected_y[j] - 5);
-			glVertex2i(selected_x[j] + 5, selected_y[j] + 5);
-			glVertex2i(selected_x[j] - 5, selected_y[j] + 5);
+			glVertex2f(line[i].x1 -5, line[i].y1 - 5);
+			glVertex2f(line[i].x1 +5, line[i].y1 - 5);
+			glVertex2f(line[i].x1 +5, line[i].y1 + 5);
+			glVertex2f(line[i].x1 -5, line[i].y1 + 5);
 			glEnd();
-		}
 
-		else if (mode_program == 1 && i == selected_num[selected_count] && selected_shape[selected_count] == 0 && mode_selection == 1) {
-			glColor3f(0, 1, 0);
 			glBegin(GL_LINE_LOOP);
-			glVertex2i(selected_x[selected_count] - 5, selected_y[selected_count] - 5);
-			glVertex2i(selected_x[selected_count] + 5, selected_y[selected_count] - 5);
-			glVertex2i(selected_x[selected_count] + 5, selected_y[selected_count] + 5);
-			glVertex2i(selected_x[selected_count] - 5, selected_y[selected_count] + 5);
+			glVertex2f(line[i].x2 - 5, line[i].y2 - 5);
+			glVertex2f(line[i].x2 + 5, line[i].y2 - 5);
+			glVertex2f(line[i].x2 + 5, line[i].y2 + 5);
+			glVertex2f(line[i].x2 - 5, line[i].y2 + 5);
 			glEnd();
-		}
 	}
-	if (mode_program == 1 && mode_selection == 1) {
+
+	else if (mode_program == 1 && mode_selection == 1 && line[i].selected == 1) {
+		glColor3f(0, 1, 0);
+		glBegin(GL_LINE_LOOP);
+		glVertex2f((line[i].x1+line[i].x2)/2 - 5, (line[i].y1+line[i].y2)/2 - 5);
+		glVertex2f((line[i].x1+line[i].x2)/2 + 5, (line[i].y1+line[i].y2)/2 - 5);
+		glVertex2f((line[i].x1+line[i].x2)/2 + 5, (line[i].y1+line[i].y2)/2 + 5);
+		glVertex2f((line[i].x1+line[i].x2)/2 - 5, (line[i].y1+line[i].y2)/2 + 5);
+		glEnd();
+	}
+
+	if (mode_program == 1 && mode_selection == 1 && line[i].selected == 1) {
 		glTranslated((line[i].x1 + line[i].x2) / 2, (line[i].y1 + line[i].y2) / 2, 0);
-		glRotated(line[i].r_a, 0, 0, 1);
+		glRotated(move_angle, 0, 0, 1);
 		glTranslated((-1)*(line[i].x1 + line[i].x2) / 2, (-1)*(line[i].y1 + line[i].y2) / 2, 0);
 	}
 
-	glColor3f(0, 0, 0);
+    switch(line[i].c) {
+        case 0:
+            glColor3f(0, 0, 0);
+            break;
+        case 1:
+            glColor3f(0,1,0);
+            break;
+        case 2:
+            glColor3f(0,0,1);
+        break;
+	}
 	glBegin(GL_LINES);
-	glVertex2i(line[i].x1, line[i].y1);
-	if (line[i].drawing_state == 1) glVertex2i(mouseX, mouseY);
-	else glVertex2i(line[i].x2, line[i].y2);
+	glVertex2f(line[i].x1, line[i].y1);
+	if (line[i].drawing_state == 1) glVertex2f(mouseX, mouseY);
+	else glVertex2f(line[i].x2, line[i].y2);
 	glEnd();
 	glPopMatrix();
 }
 void draw_rect(int i) {
-	double angle;
-	angle = rect[i].r_a * 3.141592 / 180;
-	glLineWidth(2.0);
+	glLineWidth(rect[i].w);
 	glPushMatrix();
-	glTranslated(rect[i].t_x, rect[i].t_y, 0);
+	if (rect[i].selected == 1) glTranslated(move_x, move_y, 0);
 
-	if (mode_program == 1 && i == selected_num[selected_count] && selected_shape[selected_count] == 1 && mode_selection == 0) {
+	if (mode_program == 1 && mode_selection == 0 && rect[i].selected == 1) {
 		glColor3f(1, 0, 0);
 		glBegin(GL_LINE_LOOP);
-		glVertex2i(selected_x[selected_count] - 5, selected_y[selected_count] - 5);
-		glVertex2i(selected_x[selected_count] + 5, selected_y[selected_count] - 5);
-		glVertex2i(selected_x[selected_count] + 5, selected_y[selected_count] + 5);
-		glVertex2i(selected_x[selected_count] - 5, selected_y[selected_count] + 5);
+		glVertex2f(rect[i].x1 - 5, rect[i].y1 - 5);
+		glVertex2f(rect[i].x1 + 5, rect[i].y1 - 5);
+		glVertex2f(rect[i].x1 + 5, rect[i].y1 + 5);
+		glVertex2f(rect[i].x1 - 5, rect[i].y1 + 5);
+		glEnd();
+
+		glBegin(GL_LINE_LOOP);
+		glVertex2f(rect[i].x2 - 5, rect[i].y2 - 5);
+		glVertex2f(rect[i].x2 + 5, rect[i].y2 - 5);
+		glVertex2f(rect[i].x2 + 5, rect[i].y2 + 5);
+		glVertex2f(rect[i].x2 - 5, rect[i].y2 + 5);
+		glEnd();
+
+		glBegin(GL_LINE_LOOP);
+		glVertex2f(rect[i].x3 - 5, rect[i].y3 - 5);
+		glVertex2f(rect[i].x3 + 5, rect[i].y3 - 5);
+		glVertex2f(rect[i].x3 + 5, rect[i].y3 + 5);
+		glVertex2f(rect[i].x3 - 5, rect[i].y3 + 5);
+		glEnd();
+
+		glBegin(GL_LINE_LOOP);
+		glVertex2f(rect[i].x4 - 5, rect[i].y4 - 5);
+		glVertex2f(rect[i].x4 + 5, rect[i].y4 - 5);
+		glVertex2f(rect[i].x4 + 5, rect[i].y4 + 5);
+		glVertex2f(rect[i].x4 - 5, rect[i].y4 + 5);
 		glEnd();
 	}
 
-	else if (mode_program == 1 && i == selected_num[selected_count] && selected_shape[selected_count] == 1 && mode_selection == 1) {
+	else if (mode_program == 1 && mode_selection == 1 && rect[i].selected == 1) {
 		glColor3f(0, 1, 0);
 		glBegin(GL_LINE_LOOP);
-		glVertex2i(selected_x[selected_count] - 5, selected_y[selected_count] - 5);
-		glVertex2i(selected_x[selected_count] + 5, selected_y[selected_count] - 5);
-		glVertex2i(selected_x[selected_count] + 5, selected_y[selected_count] + 5);
-		glVertex2i(selected_x[selected_count] - 5, selected_y[selected_count] + 5);
+		glVertex2f((rect[i].x1 + rect[i].x2) / 2 - 5, (rect[i].y1 + rect[i].y2) / 2 - 5);
+		glVertex2f((rect[i].x1 + rect[i].x2) / 2 + 5, (rect[i].y1 + rect[i].y2) / 2 - 5);
+		glVertex2f((rect[i].x1 + rect[i].x2) / 2 + 5, (rect[i].y1 + rect[i].y2) / 2 + 5);
+		glVertex2f((rect[i].x1 + rect[i].x2) / 2 - 5, (rect[i].y1 + rect[i].y2) / 2 + 5);
 		glEnd();
 	}
 
 
-	if (mode_program == 1 && mode_selection == 1) {
+	if (mode_program == 1 && mode_selection == 1 && rect[i].selected == 1) {
 		glTranslated((rect[i].x1 + rect[i].x2) / 2, (rect[i].y1 + rect[i].y2) / 2, 0);
-		glRotated(rect[i].r_a, 0, 0, 1);
+		glRotated(move_angle, 0, 0, 1);
 		glTranslated((-1)*(rect[i].x1 + rect[i].x2) / 2, (-1)*(rect[i].y1 + rect[i].y2) / 2, 0);
 	}
 
-	glColor3f(0, 0, 0);
+	switch(rect[i].c) {
+        case 0:
+            glColor3f(0, 0, 0);
+            break;
+        case 1:
+            glColor3f(1,0,0);
+            break;
+        case 2:
+            glColor3f(0,0,1);
+        break;
+	}
 	glBegin(GL_LINE_LOOP);
 	glVertex2f(rect[i].x1, rect[i].y1);
 	if (rect[i].drawing_state == 1)
-	{ 
+	{
 		glVertex2f(rect[i].x1, mouseY);
 		glVertex2f(mouseX, mouseY);
-		glVertex2f(mouseX, rect[i].y1); 
+		glVertex2f(mouseX, rect[i].y1);
 	}
 	else {
 		glVertex2f(rect[i].x3, rect[i].y3);
@@ -645,26 +1187,46 @@ void draw_rect(int i) {
 	glPopMatrix();
 }
 void draw_circle(int i) {
-	glLineWidth(2.0);
+	glLineWidth(circle[i].w);
 	glPushMatrix();
-	glTranslated(circle[i].t_x, circle[i].t_y, 0);
+	if (circle[i].selected == 1) glTranslated(move_x, move_y, 0);
 
-	if (i == selected_num[selected_count] && selected_shape[selected_count] == 2 && mode_selection == 0) {
+	if (mode_program == 1 && mode_selection == 0 && circle[i].selected == 1) {
 		glColor3f(1, 0, 0);
 		glBegin(GL_LINE_LOOP);
-		glVertex2i(selected_x[selected_count] - 5, selected_y[selected_count] - 5);
-		glVertex2i(selected_x[selected_count] + 5, selected_y[selected_count] - 5);
-		glVertex2i(selected_x[selected_count] + 5, selected_y[selected_count] + 5);
-		glVertex2i(selected_x[selected_count] - 5, selected_y[selected_count] + 5);
+		glVertex2f(circle[i].x - 5, circle[i].y - 5);
+		glVertex2f(circle[i].x + 5, circle[i].y - 5);
+		glVertex2f(circle[i].x + 5, circle[i].y + 5);
+		glVertex2f(circle[i].x - 5, circle[i].y + 5);
 		glEnd();
-
 	}
-	glColor3f(0, 0, 0);
+
+	else if (mode_program == 1 && mode_selection == 1 && circle[i].selected == 1) {
+		glColor3f(0, 1, 0);
+		glBegin(GL_LINE_LOOP);
+		glVertex2f(circle[i].x - 5, circle[i].y - 5);
+		glVertex2f(circle[i].x + 5, circle[i].y - 5);
+		glVertex2f(circle[i].x + 5, circle[i].y + 5);
+		glVertex2f(circle[i].x - 5, circle[i].y + 5);
+		glEnd();
+	}
+
+		switch(circle[i].c) {
+        case 0:
+            glColor3f(0, 0, 0);
+            break;
+        case 1:
+            glColor3f(1,0,0);
+            break;
+        case 2:
+            glColor3f(0,0,1);
+        break;
+	}
 
 	glBegin(GL_LINE_LOOP);
 	if (circle[i].drawing_state == 1) {
 		circle[i].rad = get_distance(mouseX, mouseY, circle[i].x, circle[i].y);
-		printf("%d %d %d %d %f\n", mouseX, circle[i].x, mouseY, circle[i].y, circle[i].rad);
+//		printf("%d %d %d %d %f\n", mouseX, circle[i].x, mouseY, circle[i].y, circle[i].rad);
 	}
 	for (int j = 0; j < 360; j++) {
 		double angle, x, y;
@@ -676,13 +1238,144 @@ void draw_circle(int i) {
 	glEnd();
 	glPopMatrix();
 }
+void draw_triangle(int i) {
+	glLineWidth(triangle[i].w);
+	glPushMatrix();
+	if (triangle[i].selected == 1) glTranslated(move_x, move_y, 0);
+
+	if (mode_program == 1 && mode_selection == 0 && triangle[i].selected == 1) {
+		glColor3f(1, 0, 0);
+		glBegin(GL_LINE_LOOP);
+		glVertex2f(triangle[i].x1 - 5, triangle[i].y1 - 5);
+		glVertex2f(triangle[i].x1 + 5, triangle[i].y1 - 5);
+		glVertex2f(triangle[i].x1 + 5, triangle[i].y1 + 5);
+		glVertex2f(triangle[i].x1 - 5, triangle[i].y1 + 5);
+		glEnd();
+
+		glBegin(GL_LINE_LOOP);
+		glVertex2f(triangle[i].x2 - 5, triangle[i].y2 - 5);
+		glVertex2f(triangle[i].x2 + 5, triangle[i].y2 - 5);
+		glVertex2f(triangle[i].x2 + 5, triangle[i].y2 + 5);
+		glVertex2f(triangle[i].x2 - 5, triangle[i].y2 + 5);
+		glEnd();
+
+		glBegin(GL_LINE_LOOP);
+		glVertex2f(triangle[i].x3 - 5, triangle[i].y3 - 5);
+		glVertex2f(triangle[i].x3 + 5, triangle[i].y3 - 5);
+		glVertex2f(triangle[i].x3 + 5, triangle[i].y3 + 5);
+		glVertex2f(triangle[i].x3 - 5, triangle[i].y3 + 5);
+		glEnd();
+	}
+
+	else if (mode_program == 1 && mode_selection == 1 && triangle[i].selected == 1) {
+		glColor3f(0, 1, 0);
+		glBegin(GL_LINE_LOOP);
+		glVertex2f((triangle[i].x1 + triangle[i].x2 + triangle[i].x3) / 3 - 5, (triangle[i].y1 + triangle[i].y2 + triangle[i].y3) / 3 - 5);
+		glVertex2f((triangle[i].x1 + triangle[i].x2 + triangle[i].x3) / 3 + 5, (triangle[i].y1 + triangle[i].y2 + triangle[i].y3) / 3 - 5);
+		glVertex2f((triangle[i].x1 + triangle[i].x2 + triangle[i].x3) / 3 + 5, (triangle[i].y1 + triangle[i].y2 + triangle[i].y3) / 3 + 5);
+		glVertex2f((triangle[i].x1 + triangle[i].x2 + triangle[i].x3) / 3 - 5, (triangle[i].y1 + triangle[i].y2 + triangle[i].y3) / 3 + 5);
+		glEnd();
+	}
+
+
+	if (mode_program == 1 && mode_selection == 1 && triangle[i].selected == 1) {
+		glTranslated((triangle[i].x1 + triangle[i].x2 + triangle[i].x3) / 3, (triangle[i].y1 + triangle[i].y2 + triangle[i].y3) / 3, 0);
+		glRotated(move_angle, 0, 0, 1);
+		glTranslated((-1)*(triangle[i].x1 + triangle[i].x2 + triangle[i].x3) / 3, (-1)*(triangle[i].y1 + triangle[i].y2 + triangle[i].y3) / 3, 0);
+	}
+
+		switch(triangle[i].c) {
+        case 0:
+            glColor3f(0, 0, 0);
+            break;
+        case 1:
+            glColor3f(1,0,0);
+            break;
+        case 2:
+            glColor3f(0,0,1);
+        break;
+	}
+
+	glBegin(GL_LINE_LOOP);
+	glVertex2f(triangle[i].x1, triangle[i].y1);
+	if (triangle[i].drawing_state == 1)
+	{
+		glVertex2f(2*triangle[i].x1-mouseX, mouseY);
+		glVertex2f(mouseX, mouseY);
+	}
+	else {
+		glVertex2f(triangle[i].x3, triangle[i].y3);
+		glVertex2f(triangle[i].x2, triangle[i].y2);
+	}
+	glEnd();
+	glPopMatrix();
+}
+void draw_penta(int i) {
+	glLineWidth(penta[i].w);
+	glPushMatrix();
+	if (penta[i].selected == 1) glTranslated(move_x, move_y, 0);
+
+	if (mode_program == 1 && mode_selection == 0 && penta[i].selected == 1) {
+		glColor3f(1, 0, 0);
+		glBegin(GL_LINE_LOOP);
+		glVertex2f(penta[i].x - 5, penta[i].y - 5);
+		glVertex2f(penta[i].x + 5, penta[i].y - 5);
+		glVertex2f(penta[i].x + 5, penta[i].y + 5);
+		glVertex2f(penta[i].x - 5, penta[i].y + 5);
+		glEnd();
+	}
+
+	else if (mode_program == 1 && mode_selection == 1 && penta[i].selected == 1) {
+		glColor3f(0, 1, 0);
+		glBegin(GL_LINE_LOOP);
+		glVertex2f(penta[i].x - 5, penta[i].y - 5);
+		glVertex2f(penta[i].x + 5, penta[i].y - 5);
+		glVertex2f(penta[i].x + 5, penta[i].y + 5);
+		glVertex2f(penta[i].x - 5, penta[i].y + 5);
+		glEnd();
+	}
+
+	if (mode_program == 1 && mode_selection == 1 && penta[i].selected == 1) {
+		glTranslated(penta[i].x, penta[i].y, 0);
+		glRotated(move_angle, 0, 0, 1);
+		glTranslated((-1)*penta[i].x, (-1)*penta[i].y, 0);
+	}
+
+		switch(penta[i].c) {
+        case 0:
+            glColor3f(0, 0, 0);
+            break;
+        case 1:
+            glColor3f(1,0,0);
+            break;
+        case 2:
+            glColor3f(0,0,1);
+        break;
+	}
+
+	glBegin(GL_LINE_LOOP);
+	if (penta[i].drawing_state == 1) {
+		penta[i].rad = get_distance(mouseX, mouseY, penta[i].x, penta[i].y);
+		//		printf("%d %d %d %d %f\n", mouseX, penta[i].x, mouseY, penta[i].y, penta[i].rad);
+	}
+	for (int j = 0+penta[i].angle; j < 360+ penta[i].angle; j += 72) {
+		double angle, x, y;
+		angle = j*3.141592 / 180;
+		x = penta[i].rad*cos(angle);
+		y = penta[i].rad*sin(angle);
+		glVertex2f(penta[i].x + x, penta[i].y + y);
+	}
+	glEnd();
+	glPopMatrix();
+}
 void display()
 {
-	if (GetKeyState(0x4D) & 0x8000) {
+//	printf("%d\n", count);
+/*	if (GetKeyState(0x4D) & 0x8000) {
 		mult_select = 1;
 	}
 	else mult_select = 0;
-
+*/
 	// Clear Color = black (you can change it)
 	// Clear the buffer
 	glClearColor(1, 1, 1, 0);
@@ -699,7 +1392,7 @@ void display()
 	draw_text(text, strlen(text), 0, 0);
 
 
-	for (int j = 0; j < num_line+1; j++) {
+	for (int j = 0; j < num_line + 1; j++) {
 		draw_line(j);
 	}
 	for (int j = 0; j < num_rect + 1; j++) {
@@ -708,8 +1401,14 @@ void display()
 	for (int j = 0; j < num_circle + 1; j++) {
 		draw_circle(j);
 	}
+	for (int j = 0; j < num_triangle + 1; j++) {
+		draw_triangle(j);
+	}
+	for (int j = 0; j < num_penta + 1; j++) {
+		draw_penta(j);
+	}
 
-	
+
 
 	glFlush();
 
@@ -719,7 +1418,7 @@ void display()
 
 
 // HEY, look, i'm ignoring the command line!
-// 
+//
 int main(int argc, char** argv)
 {
 	text = "Hi, This is drawing pad!";
@@ -731,8 +1430,7 @@ int main(int argc, char** argv)
 		line[j].y2 = -1;
 		line[j].drawing_state = 0;
 
-		line[j].t_x = 0;
-		line[j].t_y = 0;
+		line[j].selected = 0;
 	}
 
 	for (int j = 0; j < MAX_ARGS; j++) {
@@ -742,14 +1440,11 @@ int main(int argc, char** argv)
 		rect[j].y2 = -1;
 		rect[j].drawing_state = 0;
 
-		rect[j].t_x = 0;
-		rect[j].t_y = 0;
-		rect[j].r_a = 0;
+		rect[j].selected = 0;
 	}
+	selected_num = -1;
+	selected_shape = -1;
 
-	for (int j = 0; j < MAX_MULT_S; j++) {
-		min_distance[j] = 10;
-	}
 
 	glutInit(&argc, argv);   // not necessary unless on Unix
 	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
@@ -757,10 +1452,11 @@ int main(int argc, char** argv)
 	glutCreateWindow("mouseMotion (lec3)");
 
 	glutReshapeFunc(reshape);       // register respace (anytime window changes)
-	glutKeyboardFunc(keyboard);     // register keyboard func
+	glutKeyboardFunc(keyboard);
+	glutKeyboardUpFunc(keyboard_up);     // register keyboard func
 	glutMouseFunc(mousePress);      // register mouse press funct
 	glutMotionFunc(mouseMotion);     // ** Note, the name is just glutMotionFunc (not glutMouseMotionFunc)
-	glutPassiveMotionFunc(mousePassiveMotion); // Passive motion           
+	glutPassiveMotionFunc(mousePassiveMotion); // Passive motion
 	glutIdleFunc(myidle);
 	glutDisplayFunc(display);       // register display function
 	glutMainLoop();
@@ -768,3 +1464,4 @@ int main(int argc, char** argv)
 	return 1;
 
 }
+
